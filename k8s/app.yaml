@@ -1,0 +1,107 @@
+# demo.encloud.dev uygulamasi: Deployment + Service + Ingress
+# IMAGE_PLACEHOLDER satirini GitHub Actions her deploy'da gercek imaj adresiyle degistirir.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: demo
+  labels:
+    app: web
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: web
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: web
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: web
+          image: IMAGE_PLACEHOLDER
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: demo
+spec:
+  selector:
+    app: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  namespace: demo
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: demo.encloud.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  name: http
