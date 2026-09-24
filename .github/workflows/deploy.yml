@@ -1,0 +1,53 @@
+# main dalina her push'ta: Docker imajini derler, GHCR'a yukler ve Kubernetes'e deploy eder.
+name: Build ve Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy-demo
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodu al
+        uses: actions/checkout@v5
+
+      - name: Imaj adini ve surum bilgisini hazirla
+        run: |
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+          echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "BUILD_TIME=$(TZ=Europe/Istanbul date '+%d.%m.%Y %H:%M:%S')" >> "$GITHUB_ENV"
+
+      - name: GitHub imaj deposuna (GHCR) giris
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Imaji derle ve yukle
+        run: |
+          docker build \
+            --build-arg APP_VERSION="$SHORT_SHA" \
+            --build-arg BUILD_TIME="$BUILD_TIME" \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            -t "$IMAGE:$GITHUB_SHA" -t "$IMAGE:latest" .
+          docker push "$IMAGE:$GITHUB_SHA"
+          docker push "$IMAGE:latest"
+
+      - name: Kubernetes'e deploy
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
+        run: |
+          printf '%s\n' "$KUBECONFIG_DATA" > "$RUNNER_TEMP/kubeconfig"
+          chmod 600 "$RUNNER_TEMP/kubeconfig"
+          export KUBECONFIG="$RUNNER_TEMP/kubeconfig"
+          sed -i "s#IMAGE_PLACEHOLDER#$IMAGE:$GITHUB_SHA#" k8s/app.yaml
+          kubectl apply -f k8s/app.yaml
+          kubectl -n demo rollout status deployment/web --timeout=180s
+          kubectl -n demo get pods -l app=web -o wide
