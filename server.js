@@ -11,8 +11,8 @@ const NODE_NAME = process.env.NODE_NAME || "-";
 const STARTED_AT = Date.now();
 
 // ---- Bu iki satiri degistirip push'layin; birkac dakika icinde sitede gorunur ----
-const TITLE = "Encloud Demo";
-const MESSAGE = "Bu sayfa GitHub'a yapılan her push'ta Kubernetes cluster'ına otomatik olarak deploy ediliyor.";
+const TITLE = "Encloud Demo – Otomatik Deploy Testi";
+const MESSAGE = "Bu değişiklik GitHub'a push'landı ve birkaç dakika içinde Kubernetes cluster'ına otomatik olarak deploy edildi.";
 // -----------------------------------------------------------------------------------
 
 let requestCount = 0;
